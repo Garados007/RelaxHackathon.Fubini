@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "RelaxHackathon.Fubini": {
+      "commandName": "Project",
+      "commandLineArgs": "--no-out 3500"
+    }
+  }
+}
