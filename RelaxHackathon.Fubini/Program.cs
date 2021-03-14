@@ -27,17 +27,16 @@ namespace RelaxHackathon.Fubini
             System.Runtime.GCSettings.LatencyMode = System.Runtime.GCLatencyMode.LowLatency;
             System.Runtime.GCSettings.LargeObjectHeapCompactionMode 
                 = System.Runtime.GCLargeObjectHeapCompactionMode.Default;
-            GC.TryStartNoGCRegion(8_000_000_000);
+            var hasStarted = GC.TryStartNoGCRegion(8_000_000_000);
             var fubini = new Fubini(n);
             await fubini.CalcBufferAsync().ConfigureAwait(false);
-            GC.EndNoGCRegion();
             var watch = new System.Diagnostics.Stopwatch();
             watch.Start();
             if (nooutput)
             {
                 for (int i = 0; i < n; ++i)
                 {
-                    System.Runtime.GCSettings.LatencyMode = System.Runtime.GCLatencyMode.LowLatency;
+                    //System.Runtime.GCSettings.LatencyMode = System.Runtime.GCLatencyMode.LowLatency;
 
                     await fubini.CalcAsync(i).ConfigureAwait(false);
 
@@ -62,19 +61,18 @@ namespace RelaxHackathon.Fubini
                 {
                     Console.WriteLine(i == 0 ? "" : ",");
 
-                    System.Runtime.GCSettings.LatencyMode = System.Runtime.GCLatencyMode.LowLatency;
-                    GC.TryStartNoGCRegion(8_000_000_000);
+                    //System.Runtime.GCSettings.LatencyMode = System.Runtime.GCLatencyMode.LowLatency;
 
                     var num = await fubini.CalcAsync(i).ConfigureAwait(false);
                     Console.Write($"  {num}");
 
                     GC.Collect(0, GCCollectionMode.Optimized, false, false);
-
-                    GC.EndNoGCRegion();
                 }
                 Console.WriteLine();
                 Console.WriteLine("]");
             }
+            if (hasStarted)
+                GC.EndNoGCRegion();
             return 0;
         }
     }
