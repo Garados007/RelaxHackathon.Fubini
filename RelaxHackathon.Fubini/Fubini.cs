@@ -28,14 +28,24 @@ namespace RelaxHackathon.Fubini
             oldBinBuffer = new BigInteger[n + 1];
             previousResults = new BigInteger[n + 1];
             previousResults.Span[0] = binBuffer.Span[0] = oldBinBuffer.Span[0] = BigInteger.One;
+            backgroundJob = CalcBinomialWithPascalTriangleAsync(1);
         }
+
+        private Task backgroundJob;
 
         public async Task<BigInteger> CalcAsync()
         {
-            n++; 
+            n++;
+            // wait for the background job to finish. These will be the the new coefficents
+            await backgroundJob.ConfigureAwait(false);
+            // flip the buffers. The background job has created the new values on the old buffer
             (binBuffer, oldBinBuffer) = (oldBinBuffer, binBuffer);
-            await CalcBinomialWithPascalTriangleAsync(n).ConfigureAwait(false);
+            // initialize the new background job
+            backgroundJob = CalcBinomialWithPascalTriangleAsync(n + 1);
+
+            // calculate the new Fubini value
             var result = await CalcSumAsync(n).ConfigureAwait(false);
+            // store this because it will be needed in future
             previousResults.Span[n] = result;
             return result;
         }
@@ -89,15 +99,15 @@ namespace RelaxHackathon.Fubini
         /// <returns>the execution task</returns>
         private async Task CalcBinomialWithPascalTriangleAsync(int n)
         {
-            binBuffer.Span[0] = BigInteger.One;
+            oldBinBuffer.Span[0] = BigInteger.One;
             await ExecuteParallel(n - 1, (i1, i2) =>
             {
                 for (int i = i1 + 1; i <= i2; ++i)
                 {
-                    binBuffer.Span[i] = oldBinBuffer.Span[i - 1] + oldBinBuffer.Span[i];
+                    oldBinBuffer.Span[i] = binBuffer.Span[i - 1] + binBuffer.Span[i];
                 }
             }).ConfigureAwait(false);
-            binBuffer.Span[n] = BigInteger.One;
+            oldBinBuffer.Span[n] = BigInteger.One;
         }
 
         private async Task<BigInteger> CalcSumAsync(int n)
