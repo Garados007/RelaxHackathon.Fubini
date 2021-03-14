@@ -49,7 +49,7 @@ namespace RelaxHackathon.Fubini
         {
             var powerFunc = CalcPowers(n);
             if (powerFunc != null)
-                await ExecuteParallel(n, powerFunc).ConfigureAwait(false);
+                await ExecuteParallel(powerBuffer.Length, powerFunc).ConfigureAwait(false);
             return await CalcFullSum(n).ConfigureAwait(false);
         }
 
@@ -69,12 +69,12 @@ namespace RelaxHackathon.Fubini
         private static async Task ExecuteParallel(int n, Func<int, int, Task> func)
         {
             Memory<Task> jobs = new Task[Environment.ProcessorCount];
-            var slice = (int)Math.Floor((float)n / jobs.Length);
+            var slice = (int)Math.Ceiling((float)n / jobs.Length);
             int i = 0;
             for (; i < jobs.Length && i * slice < n; ++i)
             {
                 var start = slice * i;
-                var end = i + Math.Min(n - start, slice);
+                var end = start + Math.Min(n - start, slice);
                 jobs.Span[i] = func(start, end);
             }
             for (; i < jobs.Length; ++i)
@@ -90,7 +90,7 @@ namespace RelaxHackathon.Fubini
             if (n == 0)
                 return (n1, n2) =>
                 {
-                    for (int i = n1; i <= n2; ++i)
+                    for (int i = n1; i < n2; ++i)
                     {
                         powerBuffer.Span[i] = BigInteger.One;
                     }
@@ -102,7 +102,7 @@ namespace RelaxHackathon.Fubini
             if (n - lastPower != 1)
                 return (n1, n2) =>
                 {
-                    for (int i = n1; i <= n2; ++i)
+                    for (int i = n1; i < n2; ++i)
                     {
                         powerBuffer.Span[i] = BigInteger.Pow(i, n);
                     }
@@ -110,7 +110,7 @@ namespace RelaxHackathon.Fubini
             // multiply each value
             return (n1, n2) =>
             {
-                for (int i = n1; i <= n2; ++i)
+                for (int i = n1; i < n2; ++i)
                 {
                     powerBuffer.Span[i] *= i;
                 }
