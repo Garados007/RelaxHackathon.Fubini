@@ -27,13 +27,14 @@ namespace RelaxHackathon.Fubini
             binBuffer = new BigInteger[n + 1];
             oldBinBuffer = new BigInteger[n + 1];
             previousResults = new BigInteger[n + 1];
-            previousResults.Span[0] = BigInteger.One;
+            previousResults.Span[0] = binBuffer.Span[0] = oldBinBuffer.Span[0] = BigInteger.One;
         }
 
         public async Task<BigInteger> CalcAsync()
         {
-            n++;
-            CalcBinomialWithPascalTriangle(n);
+            n++; 
+            (binBuffer, oldBinBuffer) = (oldBinBuffer, binBuffer);
+            await CalcBinomialWithPascalTriangleAsync(n).ConfigureAwait(false);
             var result = await CalcSumAsync(n).ConfigureAwait(false);
             previousResults.Span[n] = result;
             return result;
@@ -81,15 +82,21 @@ namespace RelaxHackathon.Fubini
             else return default;
         }
 
-        private void CalcBinomialWithPascalTriangle(int n)
+        /// <summary>
+        /// This updates the old buffer with the Pascal Triangle. This will be used in the next instance
+        /// </summary>
+        /// <param name="n">the next n</param>
+        /// <returns>the execution task</returns>
+        private async Task CalcBinomialWithPascalTriangleAsync(int n)
         {
-            // add sums to left side
-            (binBuffer, oldBinBuffer) = (oldBinBuffer, binBuffer);
             binBuffer.Span[0] = BigInteger.One;
-            for (int i = 1; i < n; ++i)
+            await ExecuteParallel(n - 1, (i1, i2) =>
             {
-                binBuffer.Span[i] = oldBinBuffer.Span[i - 1] + oldBinBuffer.Span[i];
-            }
+                for (int i = i1 + 1; i <= i2; ++i)
+                {
+                    binBuffer.Span[i] = oldBinBuffer.Span[i - 1] + oldBinBuffer.Span[i];
+                }
+            }).ConfigureAwait(false);
             binBuffer.Span[n] = BigInteger.One;
         }
 
