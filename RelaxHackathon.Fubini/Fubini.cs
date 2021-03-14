@@ -9,182 +9,110 @@ namespace RelaxHackathon.Fubini
 {
     public class Fubini
     {
-        ///// <summary>
-        ///// Buffer for i!
-        ///// </summary>
-        //private readonly Memory<BigInteger> facBuffer;
-        /// <summary>
-        /// Buffer for i^n
-        /// </summary>
-        private readonly Memory<BigInteger> powerBuffer;
-        private int lastPower = 0;
+        private Memory<BigInteger> oldBinBuffer;
         /// <summary>
         /// Buffer for (n k)
         /// </summary>
-        private readonly Memory<Memory<BigInteger>> binBuffer;
+        private Memory<BigInteger> binBuffer;
 
-        private readonly int n;
+        private readonly Memory<BigInteger> previousResults;
+
+        private int n;
 
         public Fubini(int n)
         {
             if (n < 0)
                 throw new ArgumentOutOfRangeException(nameof(n));
-            this.n = n;
-            //facBuffer = new BigInteger[n + 1];
-            powerBuffer = new BigInteger[n + 1];
-            binBuffer = new Memory<BigInteger>[n + 1];
-            for (int i = 0; i <= n; ++i)
-            {
-                binBuffer.Span[i] = new BigInteger[n + 1];
-            }
+            this.n = 0;
+            binBuffer = new BigInteger[n + 1];
+            oldBinBuffer = new BigInteger[n + 1];
+            previousResults = new BigInteger[n + 1];
+            previousResults.Span[0] = BigInteger.One;
         }
 
-        public async Task CalcBufferAsync()
+        public async Task<BigInteger> CalcAsync()
         {
-            await ExecuteParallel(n + 1, CalcAllBinomial).ConfigureAwait(false);
-            //await CalcFacsAsync().ConfigureAwait(false);
+            n++;
+            CalcBinomialWithPascalTriangle(n);
+            var result = await CalcSumAsync(n).ConfigureAwait(false);
+            previousResults.Span[n] = result;
+            return result;
         }
-
-        public async Task<BigInteger> CalcAsync(int n)
-        {
-            var powerFunc = CalcPowers(n);
-            if (powerFunc != null)
-                await ExecuteParallel(powerBuffer.Length, powerFunc).ConfigureAwait(false);
-            return await CalcFullSum(n).ConfigureAwait(false);
-        }
-
-        //private Task CalcFacsAsync()
-        //{
-        //    return Task.Run(() =>
-        //    {
-        //        var fac = BigInteger.One;
-        //        for (int i = 0; i <= n; ++i, fac *= i)
-        //            facBuffer.Span[i] = fac;
-        //    });
-        //}
 
         private static Task ExecuteParallel(int n, Action<int, int> func)
             => ExecuteParallel(n, (n1, n2) => Task.Run(() => func(n1, n2)));
 
         private static async Task ExecuteParallel(int n, Func<int, int, Task> func)
+            => await ExecuteParallel<int, int>(n, async (n1, n2) =>
+            {
+                await func(n1, n2).ConfigureAwait(false);
+                return 0;
+            }, null);
+
+        private static Task<T2?> ExecuteParallel<T1, T2>(int n, Func<int, int, T1> func,
+            Func<IEnumerable<T1>, T2>? merge)
+            => ExecuteParallel(n, async (n1, n2) => await Task.Run(() => func(n1, n2)).ConfigureAwait(false), merge);
+
+        private static async Task<T2?> ExecuteParallel<T1, T2>(int n, Func<int, int, ValueTask<T1>> func,
+            Func<IEnumerable<T1>, T2>? merge)
         {
-            Memory<Task> jobs = new Task[Environment.ProcessorCount];
+            Memory<Task<(T1?, bool)>> jobs = new Task<(T1?, bool)>[Environment.ProcessorCount];
             var slice = (int)Math.Ceiling((float)n / jobs.Length);
             int i = 0;
             for (; i < jobs.Length && i * slice < n; ++i)
             {
                 var start = slice * i;
                 var end = start + Math.Min(n - start, slice);
-                jobs.Span[i] = func(start, end);
+                jobs.Span[i] = Task.Run(async () => ((T1?)await func(start, end).ConfigureAwait(false), true));
             }
             for (; i < jobs.Length; ++i)
-                jobs.Span[i] = Task.CompletedTask;
+                jobs.Span[i] = Task.FromResult((default(T1), false));
             await Task.WhenAll(jobs.ToArray()).ConfigureAwait(false);
-        }
-
-        private Action<int, int>? CalcPowers(int n)
-        {
-            var lastPower = this.lastPower;
-            this.lastPower = n;
-            // if n = 0 all values are set to 1
-            if (n == 0)
-                return (n1, n2) =>
-                {
-                    for (int i = n1; i < n2; ++i)
-                    {
-                        powerBuffer.Span[i] = BigInteger.One;
-                    }
-                };
-            // if n hasn't change -> complete
-            if (n == lastPower)
-                return null;
-            // if the difference is not a one
-            if (n - lastPower != 1)
-                return (n1, n2) =>
-                {
-                    for (int i = n1; i < n2; ++i)
-                    {
-                        powerBuffer.Span[i] = BigInteger.Pow(i, n);
-                    }
-                };
-            // multiply each value
-            return (n1, n2) =>
+            if (merge != null)
             {
-                for (int i = n1; i < n2; ++i)
-                {
-                    powerBuffer.Span[i] *= i;
-                }
-            };
-        }
-
-        private void CalcAllBinomial(int n1, int n2)
-        {
-            for (int n = n1; n< n2; ++n)
-                CalcBinomial(n);
-        }
-
-        private void CalcBinomial(int n)
-        {
-            for (var k = 0; k <= n; ++k)
-            {
-                var result = CalcBinomial(n, k);
-                binBuffer.Span[n].Span[k] = ((n - k) & 0x01) == 0x01 // (-1) ^ (n - k)
-                    ? BigInteger.Negate(result) 
-                    : result;
+                return merge(
+                    jobs.ToArray()
+                        .Select(x => x.Result)
+                        .Where(x => x.Item2 == true)
+                        .Select(x => x.Item1)
+                        .Cast<T1>()
+                );
             }
+            else return default;
         }
 
-        // https://stackoverflow.com/a/9620533/12469007
-        private static BigInteger CalcBinomial(int n, int k)
+        private void CalcBinomialWithPascalTriangle(int n)
         {
-            if (k > n - k)
-                k = n - k;
-            BigInteger result = BigInteger.One;
-            for (int i = 1; i <= k; ++i)
+            // add sums to left side
+            (binBuffer, oldBinBuffer) = (oldBinBuffer, binBuffer);
+            binBuffer.Span[0] = BigInteger.One;
+            for (int i = 1; i < n; ++i)
             {
-                result *= n - k + i;
-                result /= i;
+                binBuffer.Span[i] = oldBinBuffer.Span[i - 1] + oldBinBuffer.Span[i];
             }
-            return result;
+            binBuffer.Span[n] = BigInteger.One;
         }
 
-        private static async Task<BigInteger> CalcSumAsync(int max, Func<int, Task<BigInteger>> func)
+        private async Task<BigInteger> CalcSumAsync(int n)
         {
-            Memory<Task<BigInteger>> jobs = new Task<BigInteger>[max];
-            for (int i = 0; i < max; ++i)
-                jobs.Span[i] = func(i);
-            await Task.WhenAll(jobs.ToArray()).ConfigureAwait(false);
-            var sum = BigInteger.Zero;
-            for (int i = 0; i< max ; ++i)
-                sum += jobs.Span[i].Result;
-            return sum;
+            return await ExecuteParallel(n, (i1, i2) => CalcPartialSum(n, i1, i2),
+                (x) =>
+                {
+                    var sum = BigInteger.Zero;
+                    foreach (var item in x)
+                        sum += item;
+                    return sum;
+                });
         }
 
-        private async Task<BigInteger> CalcFullSum(int n)
-        {
-            return await CalcSumAsync(n + 1, async k => await CalcEntryAsync(k, n).ConfigureAwait(false)).ConfigureAwait(false);
-        }
-
-        private Task<BigInteger> CalcEntryAsync(int k, int n)
-        {
-            return Task.Run(() => CalcEntry(k, n));
-        }
-
-        private BigInteger CalcEntry(int k, int n)
+        private BigInteger CalcPartialSum(int n, int i1, int i2)
         {
             var sum = BigInteger.Zero;
-            for (int j = 0; j <= k; ++j)
-                sum += CalcEntry(k, j, n);
+            for (int i = i1; i<i2; ++i)
+            {
+                sum += binBuffer.Span[i + 1] * previousResults.Span[n - (i + 1)];
+            }
             return sum;
-        }
-
-        private BigInteger CalcEntry(int k, int j, int _)
-        {
-            // calcs (-1)^(k - j) *  k! * (j! * (k-j)!)
-            var factor2 = binBuffer.Span[k].Span[j];
-            // calcs j^n
-            var factor3 = powerBuffer.Span[j];
-            return factor2 * factor3;
         }
     }
 }

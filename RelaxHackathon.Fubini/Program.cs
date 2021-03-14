@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Threading.Tasks;
 using System.Text.RegularExpressions;
+using System.Numerics;
 
 namespace RelaxHackathon.Fubini
 {
@@ -27,48 +28,40 @@ namespace RelaxHackathon.Fubini
             System.Runtime.GCSettings.LatencyMode = System.Runtime.GCLatencyMode.LowLatency;
             System.Runtime.GCSettings.LargeObjectHeapCompactionMode 
                 = System.Runtime.GCLargeObjectHeapCompactionMode.Default;
-            var hasStarted = GC.TryStartNoGCRegion(8_000_000_000);
+            //var hasStarted = GC.TryStartNoGCRegion(8_000_000_000);
             var fubini = new Fubini(n);
-            await fubini.CalcBufferAsync().ConfigureAwait(false);
             var watch = new System.Diagnostics.Stopwatch();
             watch.Start();
 
-            GC.EndNoGCRegion();
+            //GC.EndNoGCRegion();
             if (nooutput)
             {
-                for (int i = 0; i < n; ++i)
+                for (int i = 1; i < n; ++i)
                 {
-                    //System.Runtime.GCSettings.LatencyMode = System.Runtime.GCLatencyMode.LowLatency;
+                    System.Runtime.GCSettings.LatencyMode = System.Runtime.GCLatencyMode.LowLatency;
 
-                    await fubini.CalcAsync(i).ConfigureAwait(false);
+                    await fubini.CalcAsync().ConfigureAwait(false);
 
-                    GC.Collect(0, GCCollectionMode.Optimized, false, false);
+                    //if (i % 100 == 0)
+                    //    GC.Collect(0, GCCollectionMode.Optimized, false, false);
 
-                    //if (i % 10 == 0)
-                    //{
-                    //    Console.WriteLine($"[{watch.Elapsed}] {i}");
-                    //}
-
-                    //if (watch.ElapsedMilliseconds > 100_000)
-                    //{
-                    //    Console.WriteLine(i);
-                    //    return 5;
-                    //}
                 }
             }
             else
             {
-                Console.Write("[");
-                for (int i = 0; i < n; ++i)
+                Console.WriteLine("[");
+                Console.Write("  1");
+                for (int i = 1; i < n; ++i)
                 {
-                    Console.WriteLine(i == 0 ? "" : ",");
+                    Console.WriteLine(",");
 
-                    //System.Runtime.GCSettings.LatencyMode = System.Runtime.GCLatencyMode.LowLatency;
+                    System.Runtime.GCSettings.LatencyMode = System.Runtime.GCLatencyMode.LowLatency;
 
-                    var num = await fubini.CalcAsync(i).ConfigureAwait(false);
+                    var num = await fubini.CalcAsync().ConfigureAwait(false);
                     Console.Write($"  {num}");
 
-                    GC.Collect(0, GCCollectionMode.Optimized, false, false);
+                    //if (i % 100 == 0)
+                    //    GC.Collect(0, GCCollectionMode.Optimized, false, false);
                 }
                 Console.WriteLine();
                 Console.WriteLine("]");
