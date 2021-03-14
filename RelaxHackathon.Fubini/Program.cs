@@ -32,6 +32,8 @@ namespace RelaxHackathon.Fubini
             await fubini.CalcBufferAsync().ConfigureAwait(false);
             var watch = new System.Diagnostics.Stopwatch();
             watch.Start();
+
+            GC.EndNoGCRegion();
             if (nooutput)
             {
                 for (int i = 0; i < n; ++i)
@@ -71,8 +73,8 @@ namespace RelaxHackathon.Fubini
                 Console.WriteLine();
                 Console.WriteLine("]");
             }
-            if (hasStarted)
-                GC.EndNoGCRegion();
+            //if (hasStarted)
+            //    GC.EndNoGCRegion();
             return 0;
         }
     }
